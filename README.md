@@ -242,8 +242,7 @@ See [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md) and
 
 ## Citation
 
-See `CITATION.cff`. Update the publication venue, year, DOI, and repository URL
-when the paper and artifacts are public.
+Waiting...
 
 ## License
 
