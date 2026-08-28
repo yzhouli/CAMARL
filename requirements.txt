@@ -1,0 +1,10 @@
+numpy>=1.26,<3
+torch>=2.4
+transformers>=4.51
+datasets>=3.0
+peft>=0.14
+trl>=0.18
+accelerate>=1.2
+openai>=1.50
+opencv-python-headless>=4.10
+safetensors>=0.4
