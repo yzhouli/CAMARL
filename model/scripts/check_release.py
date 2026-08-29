@@ -12,26 +12,37 @@ from pathlib import Path
 REQUIRED = (
     "README.md",
     "LICENSE",
-    "MODEL_CARD.md",
     "CITATION.cff",
-    "requirements.txt",
-    "scripts/build_protocol_pools.py",
-    "scripts/build_graphhard_pools.py",
-    "scripts/build_magrpo_coordinator_dataset.py",
-    "scripts/train_magrpo_coordinator.py",
-    "scripts/eval_magrpo_coordinator_graphhard.py",
+    "model/requirements.txt",
+    "model/scripts/build_protocol_pools.py",
+    "model/scripts/build_graphhard_pools.py",
+    "model/scripts/build_magrpo_coordinator_dataset.py",
+    "model/scripts/train_magrpo_coordinator.py",
+    "model/scripts/eval_magrpo_coordinator_graphhard.py",
+    "MosaicDiff/processing/build_protocol_pools.py",
+    "MosaicDiff/processing/build_graphhard_pools.py",
+    "MosaicDiff/raw/.gitkeep",
 )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[2])
     args = parser.parse_args()
     root = args.root.resolve()
 
     missing = [value for value in REQUIRED if not (root / value).is_file()]
     if missing:
         raise SystemExit(f"missing release files: {missing}")
+
+    markdown_files = sorted(
+        str(path.relative_to(root)) for path in root.rglob("*.md") if path.is_file()
+    )
+    if markdown_files != ["README.md"]:
+        raise SystemExit(
+            "the release must contain only the root README.md; found: "
+            f"{markdown_files}"
+        )
 
     checker_path = Path(__file__).resolve()
     forbidden = (
@@ -47,6 +58,7 @@ def main() -> None:
         if (
             not path.is_file()
             or path.resolve() == checker_path
+            or ".git" in path.parts
             or path.suffix.lower() not in {".py", ".md", ".txt", ".cff"}
         ):
             continue
@@ -69,13 +81,15 @@ def main() -> None:
         raise SystemExit("non-source release files found:\n" + "\n".join(forbidden_files))
 
     # Compile into a temporary directory so the release tree stays cache-free.
+    script_paths = sorted((root / "model" / "scripts").glob("*.py"))
+    script_paths += sorted((root / "MosaicDiff" / "processing").glob("*.py"))
     with tempfile.TemporaryDirectory(prefix="camarl-release-check-") as temp_dir:
-        for index, path in enumerate(sorted((root / "scripts").glob("*.py"))):
+        for index, path in enumerate(script_paths):
             cfile = Path(temp_dir) / f"{index}.pyc"
             py_compile.compile(str(path), cfile=str(cfile), doraise=True)
 
     placeholders = []
-    for path in (root / "README.md", root / "MODEL_CARD.md", root / "CITATION.cff"):
+    for path in (root / "README.md", root / "CITATION.cff"):
         if "REPLACE_WITH_" in path.read_text():
             placeholders.append(str(path.relative_to(root)))
     print(f"release checks passed for {root}")

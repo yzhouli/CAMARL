@@ -3,8 +3,10 @@ __pycache__/
 *.py[cod]
 .venv/
 .env
-data/
-CAMARL-Dataset/
+dataset/
+MosaicDiff/raw/*
+!MosaicDiff/raw/.gitkeep
+MosaicDiff/processed/
 outputs/
 checkpoints/
 *.safetensors

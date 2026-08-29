@@ -90,6 +90,11 @@ def main() -> None:
     parser.add_argument("--graphhard-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--splits", nargs="+", default=["test"])
+    parser.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help="Record missing source media and continue with text-only fallback.",
+    )
     args = parser.parse_args()
 
     news = load_pickle(args.news)
@@ -105,7 +110,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {
         "method": "static resize or uniform 2x2 video contact sheet",
-        "pool_files": {str(path): sha256_file(path) for path in pool_files},
+        "pool_files": {path.name: sha256_file(path) for path in pool_files},
         "records": {},
     }
     for completed, news_id in enumerate(sorted(news_ids), 1):
@@ -122,10 +127,10 @@ def main() -> None:
                 mode = "existing"
                 seconds = 0.0
         manifest["records"][news_id] = {
-            "source": str(source),
+            "source": f"raw/mm/mm/{source.name}",
             "source_exists": source.exists(),
             "source_sha256": sha256_file(source) if source.exists() else None,
-            "output": str(output),
+            "output": f"processed/topic_frames/{output.name}",
             "output_exists": output.exists(),
             "output_sha256": sha256_file(output) if output.exists() else None,
             "source_duration_seconds": seconds,
@@ -138,7 +143,7 @@ def main() -> None:
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
     failures = [key for key, value in manifest["records"].items() if not value["output_exists"]]
     print(f"saved {manifest_path}; topics={len(news_ids)} failures={len(failures)}", flush=True)
-    if failures:
+    if failures and not args.allow_missing:
         raise SystemExit(f"Missing outputs for {failures[:10]}")
 
 

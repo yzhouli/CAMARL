@@ -1,117 +1,189 @@
 # CAMARL
 
-Official release scaffold for **CAMARL: Cost-Aware Multi-Agent Reinforcement
+Official implementation of **CAMARL: Cost-Aware Multi-Agent Reinforcement
 Learning for Information Diffusion Reranking**.
 
-CAMARL uses a trainable coordinator to decide whether to call semantic,
-profile, and topology experts or to stop and return a ranking. The coordinator
-is optimized with group-relative reinforcement learning, a validation-only
-cost-aware reference policy, and an explicit expert-acquisition penalty.
+CAMARL trains a coordinator to decide whether to call semantic, profile, and
+topology experts, or to stop and return a ranking. The Git repository contains
+the model and MosaicDiff preprocessing code. A local release bundle may also
+contain the processed research snapshot under `MosaicDiff/processed/`; raw and
+processed binary artifacts and model weights are not tracked by Git.
 
-## Release contents
+## Repository layout
 
 ```text
 CAMARL/
-├── scripts/       data preparation, training, selection, and evaluation
-├── configs/       paper configuration example
-└── docs/          data contract and reproducibility notes
+├── README.md                 this complete guide
+├── LICENSE                   MIT license for source code
+├── CITATION.cff              citation metadata
+├── model/
+│   ├── scripts/              preprocessing, training, and evaluation
+│   ├── configs/              paper configuration example
+│   └── requirements.txt
+└── MosaicDiff/
+    ├── raw/                  empty in the repository; install separately
+    ├── processed/            local processed snapshot or regenerated files
+    └── processing/           standalone MosaicDiff preprocessing scripts
 ```
 
-Generated outputs, datasets, and model weights are not included in this GitHub
-repository. Model weights should be uploaded as a separate artifact only after
-their license and model card are finalized. The base model is never included.
-
-## Dataset
-
-The CAMARL dataset is distributed separately because it is too large for this
-source repository. Download it from the external artifact page below, then
-extract it anywhere on your machine:
+The separately uploaded raw artifact has this local staging directory:
 
 ```text
-REPLACE_WITH_CAMARL_DATASET_DOWNLOAD_URL
+/path/to/downloaded/dataset/
+├── cascades.txt
+├── edges.txt
+├── news_all.pkl
+├── users_all.pkl
+├── test_aligned.pkl
+├── mm/mm/
+└── additional frozen raw artifacts
 ```
 
-Replace this placeholder with the final dataset URL before publishing the
-GitHub repository. The dataset artifact must carry its own license, privacy
-review, dataset card, and SHA-256 manifest.
+## 1. Download and install raw MosaicDiff data
 
-## Installation
+Raw dataset download page:
 
-Linux, Python 3.10 or 3.11, CUDA, and one or more recent NVIDIA GPUs are
-recommended.
+```text
+REPLACE_WITH_RAW_DATASET_DOWNLOAD_URL
+```
+
+After downloading and extracting the external `dataset` artifact, copy its
+contents into the empty `MosaicDiff/raw/` directory:
 
 ```bash
+cd /path/to/CAMARL
+export CAMARL_ROOT="$PWD"
+export RAW_DOWNLOAD_DIR=/path/to/downloaded/dataset
+
+mkdir -p "$CAMARL_ROOT/MosaicDiff/raw"
+rsync -a "$RAW_DOWNLOAD_DIR/" "$CAMARL_ROOT/MosaicDiff/raw/"
+```
+
+The raw artifact may contain its integrity manifest in addition to the files
+used by the code. Extra documentation or manifest files under `raw/` do not
+affect the loaders.
+
+Verify the required inputs before preprocessing:
+
+```bash
+for path in \
+  cascades.txt edges.txt news_all.pkl users_all.pkl test_aligned.pkl mm/mm
+do
+  test -e "$CAMARL_ROOT/MosaicDiff/raw/$path" || {
+    echo "missing MosaicDiff/raw/$path" >&2
+    exit 1
+  }
+done
+```
+
+Never load pickle files from an untrusted or unverified download. Python
+pickle can execute code during deserialization.
+
+## 2. Environment
+
+Linux, Python 3.10 or 3.11, CUDA, and recent NVIDIA GPUs are recommended.
+
+```bash
+cd /path/to/CAMARL
 python -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r model/requirements.txt
 ```
 
-Install `vllm` separately using the version compatible with your CUDA and
-PyTorch stack. The evaluation scripts talk to vLLM through its OpenAI-compatible
-local endpoint; no paid API is required.
+Install `vllm` separately using the version compatible with the selected CUDA
+and PyTorch stack. Evaluation uses vLLM's OpenAI-compatible local endpoint; no
+paid API is required.
 
-## Configure local paths
-
-After downloading and extracting the separate dataset artifact, point
-`CAMARL_DATASET_ROOT` to its local directory:
+Configure paths:
 
 ```bash
-export CAMARL_ROOT="$PWD"
-export CAMARL_DATASET_ROOT=/absolute/path/to/CAMARL-Dataset
-export BASE_MODEL=/path/to/Qwen3.5-4B
-export GRAPHHARD_DIR="$CAMARL_DATASET_ROOT/processed/graphhard_large"
-export PROTOCOL_SHA256="$(sha256sum "$GRAPHHARD_DIR/graphhard_protocol_report.json" | cut -d ' ' -f1)"
-export CAMARL_TRAINING_DATASET="$CAMARL_DATASET_ROOT/processed/camarl_training/coordinator_validation_states.jsonl"
+export CAMARL_ROOT=/absolute/path/to/CAMARL
+export CAMARL_MODEL_ROOT="$CAMARL_ROOT/model"
+export MOSAICDIFF_ROOT="$CAMARL_ROOT/MosaicDiff"
+export BASE_MODEL=/absolute/path/to/Qwen3.5-4B
+export GRAPHHARD_DIR="$MOSAICDIFF_ROOT/processed/graphhard_large"
+export CAMARL_TRAINING_DATASET="$MOSAICDIFF_ROOT/processed/camarl_training/coordinator_validation_states.jsonl"
+export PROTOCOL_SHA256="$(python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["GRAPHHARD_DIR"])/"graphhard_protocol_report.json"; print(hashlib.sha256(p.read_bytes()).hexdigest())')"
 ```
 
-All paths are explicit command-line arguments. No script contains a private
-server path, key, or host address.
+The base model and LoRA adapters are not included in this repository.
 
-## Pipeline
+## 3. Use the processed snapshot
 
-### 1. Build the leakage-controlled protocol
+If `MosaicDiff/processed/` was obtained with the release bundle, the following
+artifacts can be used directly:
 
-This step creates deterministic train/validation/test manifests and the base
-candidate pools from the raw dataset.
+```text
+processed/protocol/             deterministic split and base-pool artifacts
+processed/graphhard_v2/         N=20/50/100/500 candidate pools
+processed/graphhard_large/      N=1000/1500/2000 candidate pools
+processed/topic_frames/         prepared image/contact-sheet inputs
+processed/validation_cache/     fixed-all validation expert cache
+processed/camarl_training/      validation-only CAMARL coordinator states
+```
+
+The released large-pool protocol report must have this SHA-256 value:
+
+```text
+c7360ba282746a0fa9c6dee8a995d8c172197a0ceeb64937240662738e460c6f
+```
+
+## 4. Rebuild MosaicDiff processed data
+
+The commands below are run from the CAMARL repository root.
+
+### 4.1 Build leakage-controlled splits and base pools
 
 ```bash
-python scripts/build_protocol_pools.py \
-  --data-dir "$CAMARL_DATASET_ROOT/raw" \
-  --output-dir "$CAMARL_DATASET_ROOT/processed/protocol" \
+python MosaicDiff/processing/build_protocol_pools.py \
+  --data-dir "$MOSAICDIFF_ROOT/raw" \
+  --output-dir "$MOSAICDIFF_ROOT/processed/protocol" \
   --device cuda:0
+```
 
-python scripts/train_eval_twotower_base.py \
-  --protocol-dir "$CAMARL_DATASET_ROOT/processed/protocol" \
-  --users-path "$CAMARL_DATASET_ROOT/raw/users_all.pkl" \
+### 4.2 Train the five-seed graph miner
+
+```bash
+python MosaicDiff/processing/train_eval_twotower_base.py \
+  --protocol-dir "$MOSAICDIFF_ROOT/processed/protocol" \
+  --users-path "$MOSAICDIFF_ROOT/raw/users_all.pkl" \
   --device cuda:0
+```
 
-python scripts/build_graphhard_pools.py \
-  --protocol-dir "$CAMARL_DATASET_ROOT/processed/protocol" \
-  --data-dir "$CAMARL_DATASET_ROOT/raw" \
-  --output-dir "$CAMARL_DATASET_ROOT/processed/graphhard_large" \
+### 4.3 Build N=1000/1500/2000 graph-hard pools
+
+```bash
+python MosaicDiff/processing/build_graphhard_pools.py \
+  --protocol-dir "$MOSAICDIFF_ROOT/processed/protocol" \
+  --data-dir "$MOSAICDIFF_ROOT/raw" \
+  --output-dir "$MOSAICDIFF_ROOT/processed/graphhard_large" \
   --negative-universe-size 1999 \
   --pool-sizes 1000 1500 2000 \
   --device cuda:0
 ```
 
-The released processed protocol can be used directly. Rebuilding is useful for
-auditing and should reproduce the protocol report for the same raw snapshot.
-
-### 2. Prepare topic media
+### 4.4 Prepare image and video contact sheets
 
 ```bash
-python scripts/prepare_topic_media.py \
-  --news "$CAMARL_DATASET_ROOT/raw/news_all.pkl" \
-  --source-dir "$CAMARL_DATASET_ROOT/raw/mm/mm" \
+python MosaicDiff/processing/prepare_topic_media.py \
+  --news "$MOSAICDIFF_ROOT/raw/news_all.pkl" \
+  --source-dir "$MOSAICDIFF_ROOT/raw/mm/mm" \
   --graphhard-dir "$GRAPHHARD_DIR" \
-  --output-dir "$CAMARL_DATASET_ROOT/processed/topic_frames" \
-  --splits validation test
+  --output-dir "$MOSAICDIFF_ROOT/processed/topic_frames" \
+  --splits validation test \
+  --allow-missing
 ```
 
-### 3. Start local base-model servers
+`--allow-missing` records topics without a source medium in the generated
+manifest while allowing the text-only fallback used by CAMARL.
 
-Start one or more vLLM OpenAI-compatible servers. Example:
+## 5. Build CAMARL training states
+
+The released processed snapshot already contains the fixed-all cache and
+training states. Rebuild them only when auditing or regenerating the protocol.
+
+First start one or more base-model servers, for example:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 vllm serve "$BASE_MODEL" \
@@ -121,58 +193,54 @@ CUDA_VISIBLE_DEVICES=0 vllm serve "$BASE_MODEL" \
   --dtype bfloat16
 ```
 
-### 4. Cache validation expert outputs
-
-The `fixed_all` validation run executes every expert once. Its cached expert
-observations are used to construct the validation-only CAMARL training states.
+Cache all three expert outputs on validation data. The explicit pool sizes are
+required because `graphhard_large` does not contain the smaller v2 pools.
 
 ```bash
-python scripts/eval_no_grpo_graphhard.py \
+python model/scripts/eval_no_grpo_graphhard.py \
   --method fixed_all \
   --split validation \
   --served-model-name Qwen3.5_4B \
   --checkpoint "$BASE_MODEL" \
   --ports 8300 \
-  --data-dir "$CAMARL_DATASET_ROOT/raw" \
+  --pool-sizes 1000 1500 2000 \
+  --data-dir "$MOSAICDIFF_ROOT/raw" \
   --graphhard-dir "$GRAPHHARD_DIR" \
   --expected-protocol-sha256 "$PROTOCOL_SHA256" \
-  --media-dir "$CAMARL_DATASET_ROOT/processed/topic_frames" \
-  --output-dir outputs/validation_cache \
+  --media-dir "$MOSAICDIFF_ROOT/processed/topic_frames" \
+  --output-dir "$MOSAICDIFF_ROOT/processed/validation_cache" \
   --fail-on-request-error
 ```
 
-### 5. Build validation-only coordinator states
+Build validation-only coordinator states:
 
 ```bash
-python scripts/build_magrpo_coordinator_dataset.py \
-  --validation-report outputs/validation_cache/fixed_all_results.json \
-  --output outputs/coordinator_validation_states.jsonl \
-  --data-dir "$CAMARL_DATASET_ROOT/raw" \
+python model/scripts/build_magrpo_coordinator_dataset.py \
+  --validation-report "$MOSAICDIFF_ROOT/processed/validation_cache/fixed_all_results.json" \
+  --output "$CAMARL_TRAINING_DATASET" \
+  --pool-sizes 1000 1500 2000 \
+  --data-dir "$MOSAICDIFF_ROOT/raw" \
   --graphhard-dir "$GRAPHHARD_DIR" \
   --expected-protocol-sha256 "$PROTOCOL_SHA256"
 ```
 
-The generated manifest records that test records were not used and that the
-hidden target is not visible to the model prompt.
+The generated sidecar must state `split=validation`,
+`test_records_used=false`, and `target_visible_to_model=false`.
 
-The external dataset release already includes the audited files under
-`processed/validation_cache/` and `processed/camarl_training/`. To reproduce
-the released checkpoint directly, use those files and skip Steps 4--5; rerun
-the steps only when auditing or rebuilding the training data.
+## 6. Train CAMARL
 
-### 6. Train CAMARL
-
-The source default selects group size `G=4`, matching the final sensitivity
-analysis. The reward mixture is
+The paper configuration uses group size `G=4`, LoRA rank 16, alpha 32,
+dropout 0.05, learning rate `5e-7`, and 200 optimization steps. Its reward is
 `0.65 ranking utility + 0.30 reference-action alignment + 0.05 valid format`,
-with acquisition penalty `0.10` and invalid-format reward `-0.50`.
+with normalized expert-acquisition penalty `0.10` and invalid-format reward
+`-0.50`.
 
 ```bash
 torchrun --standalone --nproc_per_node=1 \
-  scripts/train_magrpo_coordinator.py \
+  model/scripts/train_magrpo_coordinator.py \
   --dataset "$CAMARL_TRAINING_DATASET" \
   --model "$BASE_MODEL" \
-  --output-dir outputs/train_N1000 \
+  --output-dir "$CAMARL_ROOT/outputs/train_N1000" \
   --pool-size 1000 \
   --num-generations 4 \
   --max-steps 200 \
@@ -182,70 +250,97 @@ torchrun --standalone --nproc_per_node=1 \
   --lora-dropout 0.05
 ```
 
-Batch size and gradient accumulation must make the accumulated global
-completion batch divisible by `--num-generations`.
+The accumulated global completion batch must be divisible by
+`--num-generations`.
 
-### 7. Select, freeze, and evaluate
+## 7. Select and freeze a validation checkpoint
 
-Use `audit_magrpo_coordinator_policy.py` on checkpoints 50/100/150/200, then
-select the best validation-dev checkpoint:
+Serve each candidate adapter through vLLM, audit checkpoints 50/100/150/200,
+and select the best validation-dev checkpoint:
 
 ```bash
-# Repeat for each served checkpoint/adapter name.
-python scripts/audit_magrpo_coordinator_policy.py \
+python model/scripts/audit_magrpo_coordinator_policy.py \
   --dataset "$CAMARL_TRAINING_DATASET" \
   --coordinator-model-name CAMARL_CKPT50 \
-  --adapter-path outputs/train_N1000/checkpoint-50 \
+  --adapter-path "$CAMARL_ROOT/outputs/train_N1000/checkpoint-50" \
   --pool-size 1000 \
   --ports 8400 \
   --fail-on-request-error \
-  --output outputs/audits/checkpoint-50.json
+  --output "$CAMARL_ROOT/outputs/audits/checkpoint-50.json"
 
-python scripts/select_freeze_magrpo_policy.py \
-  --audits outputs/audits/checkpoint-*.json \
+python model/scripts/select_freeze_magrpo_policy.py \
+  --audits "$CAMARL_ROOT"/outputs/audits/checkpoint-*.json \
   --pool-size 1000 \
-  --frozen-dir checkpoints/camarl_N1000 \
-  --output checkpoints/camarl_N1000_policy.json
+  --frozen-dir "$CAMARL_ROOT/checkpoints/camarl_N1000" \
+  --output "$CAMARL_ROOT/checkpoints/camarl_N1000_policy.json"
 ```
 
-Serve the base model with the selected LoRA adapter and run:
+Repeat the audit command for every candidate checkpoint before selection.
+
+## 8. Inference and evaluation
+
+Serve the base model with the selected LoRA adapter, then run:
 
 ```bash
-python scripts/eval_magrpo_coordinator_graphhard.py \
+python model/scripts/eval_magrpo_coordinator_graphhard.py \
   --coordinator-model-name CAMARL_N1000 \
   --base-model-name Qwen3.5_4B \
-  --coordinator-adapter checkpoints/camarl_N1000 \
-  --policy-manifest checkpoints/camarl_N1000_policy.json \
+  --coordinator-adapter "$CAMARL_ROOT/checkpoints/camarl_N1000" \
+  --policy-manifest "$CAMARL_ROOT/checkpoints/camarl_N1000_policy.json" \
   --trained-pool-size 1000 \
   --pool-sizes 1000 \
   --ports 8400 \
   --checkpoint "$BASE_MODEL" \
-  --data-dir "$CAMARL_DATASET_ROOT/raw" \
+  --data-dir "$MOSAICDIFF_ROOT/raw" \
   --graphhard-dir "$GRAPHHARD_DIR" \
   --expected-protocol-sha256 "$PROTOCOL_SHA256" \
-  --media-dir "$CAMARL_DATASET_ROOT/processed/topic_frames" \
-  --output-dir outputs/test_N1000 \
+  --media-dir "$MOSAICDIFF_ROOT/processed/topic_frames" \
+  --output-dir "$CAMARL_ROOT/outputs/test_N1000" \
   --fail-on-request-error
 ```
 
-## Reproducibility and safety
+Use `aggregate_magrpo_five_seeds.py` to aggregate seeds 13, 21, 34, 55,
+and 89 after all evaluations finish.
 
-- Training states are built from validation only; test labels are rejected.
-- Candidate order is deterministically shuffled by seed.
-- The protocol hash is checked before evaluation.
-- Output manifests bind datasets, adapters, configuration, and checkpoints by
-  SHA-256.
-- Pickle files must only be loaded from this trusted release snapshot.
+## 9. Reproducibility contract
 
-See [docs/DATA_FORMAT.md](docs/DATA_FORMAT.md) and
-[docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md) for details.
+1. Split at cascade level and never tune on test cascades.
+2. Build the graph and miner from training records only.
+3. Freeze candidate pools before running model baselines or CAMARL.
+4. Build CAMARL states only from the fixed-all validation cache.
+5. Keep reward-only target fields out of model prompts.
+6. Select checkpoints on validation-dev before test evaluation.
+7. Preserve protocol, dataset, adapter, and result SHA-256 values.
+8. Report all five decoding seeds for the complete paper protocol.
 
-## Citation
+## 10. Data and model release policy
 
-Waiting...
+- No base-model or CAMARL model-weight file is included in Git.
+- Raw MosaicDiff is distributed only through the external dataset URL.
+- The two `.pt` files in the raw artifact are frozen news feature tensors, not
+  CAMARL policy weights.
+- Dataset redistribution rights, source-platform terms, consent/legal basis,
+  privacy review, takedown contact, and final license must be completed before
+  the external raw artifact is made public.
+- Social profiles, histories, graph relations, text, images, and videos may
+  contain personal or copyrighted material. Public release requires an explicit
+  rights and privacy review rather than relying on the code's MIT license.
+- CAMARL is for research on information diffusion reranking and is not intended
+  for employment, credit, policing, healthcare, or other high-impact decisions.
 
-## License
+## 11. Publication placeholders
 
-The source code is released under the MIT License. Dataset content, model
-weights, and the base model are separate artifacts and require their own
-license and privacy review before publication.
+Replace before the final release:
+
+- `REPLACE_WITH_RAW_DATASET_DOWNLOAD_URL`
+- paper DOI or arXiv URL in `CITATION.cff`
+- final dataset DOI and license
+- base-model revision and license
+- hardware and final evaluation table
+
+## Citation and license
+
+Citation details are waiting for the paper release; provisional metadata is
+stored in `CITATION.cff`. Source code is released under
+the MIT License in `LICENSE`. The dataset and any separately released adapter
+require their own licenses.
