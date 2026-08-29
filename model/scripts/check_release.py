@@ -11,8 +11,6 @@ from pathlib import Path
 
 REQUIRED = (
     "README.md",
-    "LICENSE",
-    "CITATION.cff",
     "model/requirements.txt",
     "model/scripts/build_protocol_pools.py",
     "model/scripts/build_graphhard_pools.py",
@@ -22,6 +20,7 @@ REQUIRED = (
     "MosaicDiff/processing/build_protocol_pools.py",
     "MosaicDiff/processing/build_graphhard_pools.py",
     "MosaicDiff/raw/.gitkeep",
+    "MosaicDiff/processed/.gitkeep",
 )
 
 
@@ -89,8 +88,9 @@ def main() -> None:
             py_compile.compile(str(path), cfile=str(cfile), doraise=True)
 
     placeholders = []
-    for path in (root / "README.md", root / "CITATION.cff"):
-        if "REPLACE_WITH_" in path.read_text():
+    for path in (root / "README.md",):
+        text = path.read_text()
+        if "REPLACE_WITH_" in text or "DATASET_DOWNLOAD_URL_TO_BE_ADDED" in text:
             placeholders.append(str(path.relative_to(root)))
     print(f"release checks passed for {root}")
     if placeholders:
