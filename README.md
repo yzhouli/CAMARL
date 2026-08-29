@@ -1,28 +1,20 @@
 # CAMARL
 
-Official implementation of **CAMARL: Cost-Aware Multi-Agent Reinforcement
-Learning for Information Diffusion Reranking**.
+Official implementation of **CAMARL: Cost-Aware Multi-Agent Reinforcement Learning for Information Diffusion Reranking**.
 
-CAMARL trains a coordinator to decide whether to call semantic, profile, and
-topology experts, or to stop and return a ranking. The Git repository contains
-the model and MosaicDiff preprocessing code. A local release bundle may also
-contain the processed research snapshot under `MosaicDiff/processed/`; raw and
-processed binary artifacts and model weights are not tracked by Git.
+CAMARL trains a coordinator to decide whether to call semantic, profile, and topology experts, or to stop and return a ranking. The Git repository contains the model and MosaicDiff preprocessing code.
 
 ## Repository layout
 
 ```text
 CAMARL/
 ├── README.md                 this complete guide
-├── LICENSE                   MIT license for source code
-├── CITATION.cff              citation metadata
 ├── model/
 │   ├── scripts/              preprocessing, training, and evaluation
 │   ├── configs/              paper configuration example
 │   └── requirements.txt
 └── MosaicDiff/
-    ├── raw/                  empty in the repository; install separately
-    ├── processed/            local processed snapshot or regenerated files
+    ├── raw/                  raw data
     └── processing/           standalone MosaicDiff preprocessing scripts
 ```
 
@@ -47,8 +39,7 @@ Raw dataset download page:
 REPLACE_WITH_RAW_DATASET_DOWNLOAD_URL
 ```
 
-After downloading and extracting the external `dataset` artifact, copy its
-contents into the empty `MosaicDiff/raw/` directory:
+After downloading and extracting the external `dataset` artifact, copy its contents into the empty `MosaicDiff/raw/` directory:
 
 ```bash
 cd /path/to/CAMARL
@@ -59,25 +50,7 @@ mkdir -p "$CAMARL_ROOT/MosaicDiff/raw"
 rsync -a "$RAW_DOWNLOAD_DIR/" "$CAMARL_ROOT/MosaicDiff/raw/"
 ```
 
-The raw artifact may contain its integrity manifest in addition to the files
-used by the code. Extra documentation or manifest files under `raw/` do not
-affect the loaders.
-
-Verify the required inputs before preprocessing:
-
-```bash
-for path in \
-  cascades.txt edges.txt news_all.pkl users_all.pkl test_aligned.pkl mm/mm
-do
-  test -e "$CAMARL_ROOT/MosaicDiff/raw/$path" || {
-    echo "missing MosaicDiff/raw/$path" >&2
-    exit 1
-  }
-done
-```
-
-Never load pickle files from an untrusted or unverified download. Python
-pickle can execute code during deserialization.
+The raw artifact may contain its integrity manifest in addition to the files used by the code. Extra documentation or manifest files under `raw/` do not affect the loaders.
 
 ## 2. Environment
 
@@ -91,9 +64,7 @@ python -m pip install --upgrade pip
 python -m pip install -r model/requirements.txt
 ```
 
-Install `vllm` separately using the version compatible with the selected CUDA
-and PyTorch stack. Evaluation uses vLLM's OpenAI-compatible local endpoint; no
-paid API is required.
+Install `vllm` separately using the version compatible with the selected CUDA and PyTorch stack. Evaluation uses vLLM's OpenAI-compatible local endpoint; no paid API is required.
 
 Configure paths:
 
@@ -111,8 +82,7 @@ The base model and LoRA adapters are not included in this repository.
 
 ## 3. Use the processed snapshot
 
-If `MosaicDiff/processed/` was obtained with the release bundle, the following
-artifacts can be used directly:
+If `MosaicDiff/processed/` was obtained with the release bundle, the following artifacts can be used directly:
 
 ```text
 processed/protocol/             deterministic split and base-pool artifacts
@@ -121,12 +91,6 @@ processed/graphhard_large/      N=1000/1500/2000 candidate pools
 processed/topic_frames/         prepared image/contact-sheet inputs
 processed/validation_cache/     fixed-all validation expert cache
 processed/camarl_training/      validation-only CAMARL coordinator states
-```
-
-The released large-pool protocol report must have this SHA-256 value:
-
-```text
-c7360ba282746a0fa9c6dee8a995d8c172197a0ceeb64937240662738e460c6f
 ```
 
 ## 4. Rebuild MosaicDiff processed data
