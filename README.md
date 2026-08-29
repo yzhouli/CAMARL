@@ -13,7 +13,7 @@ files, the base language model, or CAMARL weights.
 CAMARL/
 ├── README.md
 ├── model/
-│   ├── configs/paper.env.example
+│   ├── configs/                  paper.env.example
 │   ├── requirements.txt
 │   └── scripts/                  CAMARL training and evaluation code
 ├── MosaicDiff/
@@ -21,9 +21,6 @@ CAMARL/
 │   ├── processed/                empty; preprocessing writes outputs here
 │   └── processing/               dataset preprocessing code
 ```
-
-`MosaicDiff/processed/`, `outputs/`, and `checkpoints/` are generated locally.
-Do not add their generated contents or model weights to Git.
 
 ## 1. Installation
 
@@ -39,12 +36,9 @@ python -m pip install --upgrade pip
 python -m pip install -r model/requirements.txt
 ```
 
-Install [vLLM](https://docs.vllm.ai/) separately with a version compatible
-with the installed CUDA and PyTorch versions. The examples below use vLLM's
-OpenAI-compatible local server.
+Install [vLLM](https://docs.vllm.ai/) separately with a version compatible with the installed CUDA and PyTorch versions. The examples below use vLLM's OpenAI-compatible local server.
 
-Set the working paths. `BASE_MODEL` must point to a locally downloaded base
-model; no model weights are included in this repository.
+Set the working paths. `BASE_MODEL` must point to a locally downloaded base model; no model weights are included in this repository.
 
 ```bash
 export CAMARL_ROOT="$PWD"
@@ -66,8 +60,7 @@ MosaicDiff is distributed separately because it is too large for GitHub.
 Dataset download URL: DATASET_DOWNLOAD_URL_TO_BE_ADDED
 ```
 
-Download and extract the dataset, then copy the **contents** of the extracted
-directory into `MosaicDiff/raw/`:
+Download and extract the dataset, then copy the **contents** of the extracted directory into `MosaicDiff/raw/`:
 
 ```bash
 export DOWNLOADED_DATASET=/absolute/path/to/extracted/MosaicDiff
@@ -87,26 +80,13 @@ MosaicDiff/raw/
 └── mm/mm/                       images and videos
 ```
 
-Check the required inputs before preprocessing:
-
-```bash
-for item in cascades.txt edges.txt news_all.pkl users_all.pkl test_aligned.pkl mm/mm
-do
-  test -e "$RAW_DIR/$item" || { echo "Missing: $RAW_DIR/$item"; exit 1; }
-done
-```
-
-Only load the pickle files from the official, trusted dataset download.
-
 ## 3. Preprocess MosaicDiff
 
-Run all commands from the repository root with the environment activated.
-Generated files are written to `MosaicDiff/processed/`.
+Run all commands from the repository root with the environment activated. Generated files are written to `MosaicDiff/processed/`.
 
 ### 3.1 Build the fixed data protocol
 
-This creates cascade-level train/validation/test manifests and the base
-candidate-pool records.
+This creates cascade-level train/validation/test manifests and the base candidate-pool records.
 
 ```bash
 python MosaicDiff/processing/build_protocol_pools.py \
@@ -124,13 +104,9 @@ python MosaicDiff/processing/train_eval_twotower_base.py \
   --device cuda:0
 ```
 
-This writes the five `interaction_twotower_seed*.pt` miner checkpoints into
-`$PROTOCOL_DIR`. They are preprocessing artifacts, not CAMARL policy weights.
-
 ### 3.3 Build graph-hard candidate pools
 
-The following command generates the N=1000, 1500, and 2000 validation and test
-pools used by the large-pool CAMARL experiments:
+The following command generates the N=1000, 1500, and 2000 validation and test pools used by the large-pool CAMARL experiments:
 
 ```bash
 python MosaicDiff/processing/build_graphhard_pools.py \
@@ -142,18 +118,9 @@ python MosaicDiff/processing/build_graphhard_pools.py \
   --device cuda:0
 ```
 
-Record the hash of the newly generated frozen protocol report. Later commands
-use it to prevent accidental mixing of different candidate pools.
-
-```bash
-export PROTOCOL_SHA256="$(python -c 'import hashlib,os,pathlib; p=pathlib.Path(os.environ["GRAPHHARD_DIR"])/"graphhard_protocol_report.json"; print(hashlib.sha256(p.read_bytes()).hexdigest())')"
-echo "$PROTOCOL_SHA256"
-```
-
 ### 3.4 Prepare visual inputs
 
-Static images are resized and videos are converted to four-frame contact
-sheets. Missing media are recorded and use CAMARL's text-only fallback.
+Static images are resized and videos are converted to four-frame contact sheets. Missing media are recorded and use CAMARL's text-only fallback.
 
 ```bash
 python MosaicDiff/processing/prepare_topic_media.py \
@@ -167,8 +134,7 @@ python MosaicDiff/processing/prepare_topic_media.py \
 
 ## 4. Build CAMARL training data
 
-CAMARL training first caches the outputs of all three experts on the
-**validation split only**. Start the base-model server in one terminal:
+CAMARL training first caches the outputs of all three experts on the **validation split only**. Start the base-model server in one terminal:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 vllm serve "$BASE_MODEL" \
@@ -178,8 +144,7 @@ CUDA_VISIBLE_DEVICES=0 vllm serve "$BASE_MODEL" \
   --dtype bfloat16
 ```
 
-In another terminal, restore the environment variables from Sections 1 and 3,
-then build the strict fixed-all cache:
+In another terminal, restore the environment variables from Sections 1 and 3, then build the strict fixed-all cache:
 
 ```bash
 python model/scripts/eval_no_grpo_graphhard.py \
@@ -213,15 +178,11 @@ python model/scripts/build_magrpo_coordinator_dataset.py \
   --expected-protocol-sha256 "$PROTOCOL_SHA256"
 ```
 
-The command also creates
-`coordinator_validation_states.jsonl.manifest.json`. The training script checks
-that this manifest is validation-only and does not expose target information.
+The command also creates `coordinator_validation_states.jsonl.manifest.json`. The training script checks that this manifest is validation-only and does not expose target information.
 
 ## 5. Train CAMARL
 
-The example below trains the independent N=1000 coordinator with the paper
-configuration: group size G=4, LoRA rank 16, alpha 32, dropout 0.05, learning
-rate 5e-7, and 200 optimization steps.
+The example below trains the independent N=1000 coordinator with the paper configuration: group size G=4, LoRA rank 16, alpha 32, dropout 0.05, learning rate 5e-7, and 200 optimization steps.
 
 ```bash
 torchrun --standalone --nproc_per_node=1 \
@@ -238,14 +199,11 @@ torchrun --standalone --nproc_per_node=1 \
   --lora-dropout 0.05
 ```
 
-Checkpoints are saved every 50 steps by default. The final LoRA adapter is
-written to `outputs/train_N1000/final_adapter/`. Train separate policies for
-other pool sizes by changing `--pool-size` and the output directory.
+Checkpoints are saved every 50 steps by default. The final LoRA adapter is written to `outputs/train_N1000/final_adapter/`. Train separate policies for other pool sizes by changing `--pool-size` and the output directory.
 
 ## 6. Validate and freeze a policy
 
-Before test inference, serve a candidate LoRA adapter and audit it on the
-validation-dev subset. This example audits the final adapter:
+Before test inference, serve a candidate LoRA adapter and audit it on the validation-dev subset. This example audits the final adapter:
 
 ```bash
 export CANDIDATE_ADAPTER="$CAMARL_ROOT/outputs/train_N1000/final_adapter"
@@ -275,9 +233,7 @@ python model/scripts/audit_magrpo_coordinator_policy.py \
   --output "$CAMARL_ROOT/outputs/audits/final_adapter.json"
 ```
 
-For checkpoint selection, repeat the audit for `checkpoint-50`,
-`checkpoint-100`, `checkpoint-150`, and `checkpoint-200`, then pass all audit
-JSON files to `--audits`. The minimal single-candidate freeze command is:
+For checkpoint selection, repeat the audit for `checkpoint-50`, `checkpoint-100`, `checkpoint-150`, and `checkpoint-200`, then pass all audit JSON files to `--audits`. The minimal single-candidate freeze command is:
 
 ```bash
 python model/scripts/select_freeze_magrpo_policy.py \
@@ -286,8 +242,6 @@ python model/scripts/select_freeze_magrpo_policy.py \
   --frozen-dir "$CAMARL_ROOT/checkpoints/camarl_N1000" \
   --output "$CAMARL_ROOT/checkpoints/camarl_N1000_policy.json"
 ```
-
-The frozen directory must not already contain files.
 
 ## 7. Inference and evaluation
 
@@ -328,13 +282,4 @@ python model/scripts/eval_magrpo_coordinator_graphhard.py \
   --fail-on-request-error
 ```
 
-Results are written to
-`outputs/test_N1000/magrpo_coordinator_results.json`. A policy trained for one
-pool size is intentionally evaluated only on that same pool size.
-
-## Notes
-
-- Do not commit raw or processed data, model weights, checkpoints, or outputs.
-- The dataset download URL above is a placeholder and must be replaced after
-  the external MosaicDiff release is available.
-- MosaicDiff and model weights require their own licenses before redistribution.
+Results are written to `outputs/test_N1000/magrpo_coordinator_results.json`. A policy trained for one pool size is intentionally evaluated only on that same pool size.
