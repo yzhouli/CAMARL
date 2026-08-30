@@ -2,11 +2,6 @@
 
 Official implementation of **CAMARL: Cost-Aware Multi-Agent Reinforcement Learning for Information Diffusion Reranking**.
 
-CAMARL uses a coordinator to decide whether to call semantic, profile, and
-topology experts or to stop and return a ranking. This repository contains the
-source code only. It does **not** contain MosaicDiff data, generated processed
-files, the base language model, or CAMARL weights.
-
 ## Repository contents
 
 ```text
