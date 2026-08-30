@@ -57,7 +57,7 @@ export BASE_MODEL=/absolute/path/to/Qwen3.5-4B
 MosaicDiff is distributed separately because it is too large for GitHub.
 
 ```text
-Dataset download URL: DATASET_DOWNLOAD_URL_TO_BE_ADDED
+Dataset download URL: https://www.kaggle.com/datasets/yangzhou32/mosaicdiff
 ```
 
 Download and extract the dataset, then copy the **contents** of the extracted directory into `MosaicDiff/raw/`:
